@@ -33,7 +33,9 @@ public class ShopController {
      */
     @GetMapping("/{id}")
     public Result queryShopById(@PathVariable("id") Long id) {
-        return Result.ok(shopService.getById(id));
+//        return Result.ok(shopService.getById(id));
+        // 改造为redis缓存
+        return shopService.getShopInfoById(id);
     }
 
     /**
