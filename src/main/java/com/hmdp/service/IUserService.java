@@ -13,4 +13,8 @@ import com.hmdp.entity.User;
  */
 public interface IUserService extends IService<User> {
 
+    /**
+     * 发送邮箱验证码
+     */
+    void sendCode(String mail);
 }

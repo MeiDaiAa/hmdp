@@ -23,6 +23,7 @@ target/
 *Test.java
 **/test/
 **/application-*.yml
+**/application-*.yaml
 
 ### NetBeans ###
 /nbproject/private/
