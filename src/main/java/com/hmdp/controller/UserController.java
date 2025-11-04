@@ -6,6 +6,7 @@ import com.hmdp.dto.Result;
 import com.hmdp.entity.UserInfo;
 import com.hmdp.service.IUserInfoService;
 import com.hmdp.service.IUserService;
+import com.hmdp.utils.RegexUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +37,10 @@ public class UserController {
      */
     @PostMapping("code")
     public Result sendCode(@RequestParam("phone") String phone, HttpSession session) {
+        // 0. 验证邮箱格式
+        if (RegexUtils.isEmailInvalid(phone)) {
+            return Result.fail("邮箱格式错误");
+        }
         // 发送验证码并保存验证码
         userService.sendCode(phone);
         return Result.ok();
@@ -47,8 +52,9 @@ public class UserController {
      */
     @PostMapping("/login")
     public Result login(@RequestBody LoginFormDTO loginForm, HttpSession session){
-        // TODO 实现登录功能
-        return Result.fail("功能未完成");
+        // 登录功能
+        String token = userService.login(loginForm);
+        return Result.ok(token);
     }
 
     /**
