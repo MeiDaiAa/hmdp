@@ -12,8 +12,10 @@ import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.RedisClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -36,6 +38,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+    @Autowired
+    private RedisClient redisClient;
 
     @Override
     public Result getShopInfoById(Long id) {
@@ -45,8 +49,37 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         }
 
 //        Shop shop = queryWithPassThrough(id);
-        Shop shop = queryWithMutex(id);
+//        Shop shop = queryWithMutex(id);
 //        Shop shop = queryWithLogicalExpire(id);
+
+/*        Shop shop = redisClient.queryWithPassThrough(
+                CACHE_SHOP_KEY + id,
+                Shop.class,
+                id,
+                this::getById,
+                CACHE_SHOP_TTL + RandomUtil.randomLong(1, 5),
+                TimeUnit.MINUTES
+        );*/
+
+        Shop shop = redisClient.queryWithMutex(
+                CACHE_SHOP_KEY + id,
+                LOCK_SHOP_KEY + id,
+                Shop.class,
+                id,
+                this::getById,
+                CACHE_SHOP_TTL + RandomUtil.randomLong(1, 5),
+                TimeUnit.MINUTES
+                );
+
+/*        Shop shop = redisClient.queryWithLogicalExpire(
+                CACHE_SHOP_KEY + id,
+                LOCK_SHOP_KEY + id,
+                Shop.class,
+                id,
+                this::getById,
+                CACHE_SHOP_TTL + RandomUtil.randomLong(1, 5),
+                TimeUnit.MINUTES
+        );*/
         if (shop == null) {
             return Result.fail("店铺不存在");
         }
@@ -241,7 +274,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             // 7. 存在，写入缓存
             redisTemplate.opsForValue()
                     .set(key,
-                            JSONUtil.toJsonStr(new RedisData<>(LocalDateTime.now().plusSeconds(CACHE_SHOP_TTL), byId)));
+                            JSONUtil.toJsonStr(new RedisData<>(LocalDateTime.now().plusSeconds(TimeUnit.MINUTES.toSeconds(CACHE_SHOP_TTL)), byId)));
         } finally {
             // 8. 释放锁
             if (isLock) {
