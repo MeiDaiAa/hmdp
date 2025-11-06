@@ -7,14 +7,16 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.entity.RedisData;
-import com.hmdp.entity.Shop;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -177,6 +179,19 @@ public class RedisClient {
             new ThreadPoolExecutor.DiscardPolicy()
     );
 
+    /**
+     * 逻辑过期解决缓存击穿问题
+     * @param key 缓存的key
+     * @param lockKey 锁的key
+     * @param type 数据类型
+     * @param id 数据id
+     * @param dbFallback 数据库查询方法
+     * @param time 过期时间
+     * @param timeUnit 时间单位
+     * @return  数据
+     * @param <T> 数据类型
+     * @param <ID> 数据id类型
+     */
     public <T, ID> T queryWithLogicalExpire(String key, String lockKey, Class<T> type, ID id, Function<ID, T> dbFallback, Long time, TimeUnit timeUnit) {
         // 1. 查看缓存中是否有商铺信息
         String s = redisTemplate.opsForValue().get(key);
@@ -195,9 +210,16 @@ public class RedisClient {
     }
 
     /**
-     * 更新商铺信息，使用逻辑过期解决缓存击穿
-     *
-     * @param id 商铺id
+     * 刷新缓存逻辑过期数据
+     * @param key 缓存的key
+     * @param lockKey 锁的key
+     * @param type 数据类型
+     * @param id 数据id
+     * @param dbFallback 数据查询方法
+     * @param time 过期时间
+     * @param timeUnit 时间单位
+     * @param <T> 数据类型
+     * @param <ID> 数据id类型
      */
     private<T, ID> void refreshCacheWithLogicalExpire(String key, String lockKey, Class<T> type, ID id, Function<ID, T> dbFallback, Long time, TimeUnit timeUnit) {
         boolean isLock = false;
@@ -261,6 +283,31 @@ public class RedisClient {
      */
     private void unLock(String key) {
         redisTemplate.delete(key);
+    }
+
+    // 时间戳
+    private static final long BEGIN_TIMESTAMP = LocalDateTime.of(2025, 1, 1, 0, 0, 0)
+            .toEpochSecond(ZoneOffset.UTC);
+    // 序列号位数
+    private static final int COUNT_BITS = 32;
+
+    /**
+     * 获取唯一id
+     * @param keyPrefix key前缀
+     * @return 唯一id
+     */
+    public long getUniqueId(String keyPrefix) {
+        // 1. 获取当前时间戳
+        long nowStamp = LocalDateTime.now().toEpochSecond(ZoneOffset.UTC);
+        long timestamp = nowStamp - BEGIN_TIMESTAMP;
+
+        // 2. 拼接 自增key
+        String key = "incr:" + keyPrefix + ":" + DateTimeFormatter.ofPattern("yyyy:MM:dd").format(LocalDateTime.now());
+
+        // 3. 执行自增，获取自增后的值
+        long incr = redisTemplate.opsForValue().increment(key);
+
+        return timestamp << COUNT_BITS | incr;
     }
 
 }
