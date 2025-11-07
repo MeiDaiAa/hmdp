@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.service.IVoucherService;
 import com.hmdp.utils.RedisClient;
 import com.hmdp.utils.UserHolder;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +40,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
      * @return 订单id
      */
     @Override
-    @Transactional
     public Result seckillVoucher(Long voucherId) {
         // 秒杀优惠券
         // 1. 查询优惠卷信息
@@ -56,6 +56,30 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (stock <= 0) {
             return Result.fail("优惠券已售罄");
         }
+
+        // 4. 获取代理对象，使用代理对象调用创建订单
+        IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+        // 5. 创建订单
+        synchronized (UserHolder.getUser().getId().toString().intern()) {
+            return proxy.createOrder(voucherId);
+        }
+    }
+
+    /**
+     * 创建订单, 一人一单
+     * @param voucherId 优惠券id
+     * @return 订单id
+     */
+    @Override
+    @Transactional
+    public Result createOrder(Long voucherId) {
+        // 一人一单，获取用户id
+        Long userId = UserHolder.getUser().getId();
+        Integer count = query().eq("user_id", userId).count();
+        if (count > 0) {
+            return Result.fail("用户已购买");
+        }
+
         // 4. 扣减库存
         boolean update = seckillVoucherService.update()
                 .setSql("stock = stock - 1")
