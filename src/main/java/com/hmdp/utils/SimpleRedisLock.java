@@ -7,8 +7,12 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import static com.hmdp.utils.RedisConstants.LOCK_PREFIX;
 
+/**
+ * 简单分布式锁
+ * @author meidaia
+ */
 public class SimpleRedisLock {
-    private StringRedisTemplate redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private static final String VALUE_PREFIX = UUID.randomUUID().toString();
 
     public SimpleRedisLock(StringRedisTemplate redisTemplate) {
@@ -31,8 +35,8 @@ public class SimpleRedisLock {
 
     /**
      * 释放锁 0 成功, 1 锁不存在, 2 锁不属于当前线程, 3 释放锁失败
-     * @param name
-     * @return
+     * @param name 锁名称
+     * @return 释放锁结果
      */
     public int unLock(String name) {
         String key = LOCK_PREFIX + name;
