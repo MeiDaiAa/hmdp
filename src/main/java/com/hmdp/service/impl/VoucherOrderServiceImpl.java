@@ -15,16 +15,22 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.PathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.scripting.support.ResourceScriptSource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
+import java.util.Collections;
 
 /**
  * <p>
- *  服务实现类
+ * 服务实现类
  * </p>
  *
  * @author 虎哥
@@ -43,6 +49,15 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private RedissonClient redissonClient;
 
     SimpleRedisLock simpleRedisLock;
+
+    // 加载秒杀优惠券脚本
+    private static final DefaultRedisScript<Long> seckillScript;
+    static {
+        seckillScript = new DefaultRedisScript<>();
+        seckillScript.setResultType(Long.class);
+        seckillScript.setScriptSource(new ResourceScriptSource(new ClassPathResource("seckill.lua")));
+    }
+
     @PostConstruct
     public void init() {
         simpleRedisLock = new SimpleRedisLock(redisTemplate);
@@ -50,11 +65,30 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     /**
      * 秒杀优惠券
+     *
      * @param voucherId 优惠券id
      * @return 订单id
      */
     @Override
     public Result seckillVoucher(Long voucherId) {
+        // 通过redis查询用户是否可以购买
+        Long execute = redisTemplate.execute(seckillScript,
+                Collections.emptyList(),
+                voucherId.toString(),
+                UserHolder.getUser().getId().toString()
+        );
+        if (execute != 0) {
+            return execute == 1 ? Result.fail("库存不足") : Result.fail("请勿重复下单");
+        }
+
+        long orderId = redisClient.getUniqueId("voucherOrder");
+        // TODO 发送消息到MQ
+        log.info("订单生成成功：{}, 用户：{}", orderId, UserHolder.getUser().getId());
+
+        return Result.ok(orderId);
+    }
+
+    public Result seckillVoucher2(Long voucherId) {
         // 秒杀优惠券
         // 1. 查询优惠卷信息
         SeckillVoucher seckillVoucher = seckillVoucherService.getById(voucherId);
@@ -100,10 +134,12 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 //                log.error("释放锁失败");
 //            }
         }
+
     }
 
     /**
      * 创建订单, 一人一单
+     *
      * @param voucherId 优惠券id
      * @return 订单id
      */
