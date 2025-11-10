@@ -86,10 +86,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return proxy.createOrder(voucherId);
         } finally {
             // 7. 释放锁
-            int tryUnlock = simpleRedisLock.unLock("voucher");
-            if (tryUnlock != 0) {
-                log.error("释放锁失败: {}", tryUnlock == 1 ? "锁不存在" :
-                        tryUnlock == 2 ? "锁不属于当前线程" : "释放锁失败");
+            long tryUnlock = simpleRedisLock.unLock("voucher");
+            if (tryUnlock != 1) {
+                log.error("释放锁失败");
             }
         }
     }

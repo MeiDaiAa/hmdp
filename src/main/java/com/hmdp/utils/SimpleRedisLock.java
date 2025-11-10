@@ -1,9 +1,11 @@
 package com.hmdp.utils;
 
-import cn.hutool.core.util.StrUtil;
+import cn.hutool.core.lang.UUID;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 
-import java.util.UUID;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import static com.hmdp.utils.RedisConstants.LOCK_PREFIX;
 
@@ -13,12 +15,17 @@ import static com.hmdp.utils.RedisConstants.LOCK_PREFIX;
  */
 public class SimpleRedisLock {
     private final StringRedisTemplate redisTemplate;
-    private static final String VALUE_PREFIX = UUID.randomUUID().toString();
+    private static final String VALUE_PREFIX = UUID.randomUUID().toString(true);
 
     public SimpleRedisLock(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
-
+    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
+    static {
+        UNLOCK_SCRIPT = new DefaultRedisScript<>();
+        UNLOCK_SCRIPT.setLocation(new ClassPathResource("unlock.lua"));
+        UNLOCK_SCRIPT.setResultType(Long.class);
+    }
     /**
      *  尝试获取锁
      * @param millis 锁的过期时间
@@ -34,25 +41,15 @@ public class SimpleRedisLock {
     }
 
     /**
-     * 释放锁 0 成功, 1 锁不存在, 2 锁不属于当前线程, 3 释放锁失败
+     * 释放锁 1 成功 0 失败
+     *
      * @param name 锁名称
      * @return 释放锁结果
      */
-    public int unLock(String name) {
+    public Long unLock(String name) {
         String key = LOCK_PREFIX + name;
         String value = VALUE_PREFIX + "-" + Thread.currentThread().getId();
 
-        String currentValue = redisTemplate.opsForValue().get(key);
-
-        if (StrUtil.isBlank(currentValue)) {
-            return 1;
-        }
-
-        if (!currentValue.equals(value)) {
-            return 2;
-        }
-        return redisTemplate.delete(key) ? 0 : 3;
+        return redisTemplate.execute(UNLOCK_SCRIPT, Collections.singletonList(key), value);
     }
-
-
 }
